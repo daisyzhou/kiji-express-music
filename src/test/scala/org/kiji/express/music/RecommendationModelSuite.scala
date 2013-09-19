@@ -130,11 +130,11 @@ class RecommendationModelSuite extends KijiSuite {
   val songsTableImportResult: Boolean = new KijiJob(new Args(Map())) {
     IterableSource(List(
         (EntityId("song-0"),
-            AvroRecord("topSongs" -> List(AvroRecord("song_id" -> "song-1")))),
+            AvroRecord("top_songs" -> List(AvroRecord("song_id" -> "song-1", "count" -> 1L)))),
         (EntityId("song-1"),
-            AvroRecord("topSongs" -> List(AvroRecord("song_id" -> "song-2")))),
+            AvroRecord("top_songs" -> List(AvroRecord("song_id" -> "song-2", "count" -> 2L)))),
         (EntityId("song-2"),
-            AvroRecord("topSongs" -> List(AvroRecord("song_id" -> "song-3"))))),
+            AvroRecord("top_songs" -> List(AvroRecord("song_id" -> "song-3", "count" -> 3L))))),
         ('entityId, 'topNextSongs)
     ).write(KijiOutput(songsTableURI)('topNextSongs -> "info:top_next_songs"))
   }.run
