@@ -1,5 +1,5 @@
 /**
- * (c) Copyright 2013 WibiData, Inc.
+ * (c) Copyright 2014 WibiData, Inc.
  *
  * See the NOTICE file distributed with this work for additional
  * information regarding copyright ownership.
@@ -17,7 +17,7 @@
  * limitations under the License.
  */
 
-package org.kiji.express.music
+package org.kiji.express.music.bulkimport
 
 import scala.util.parsing.json.JSON
 
@@ -25,21 +25,34 @@ import com.twitter.scalding._
 
 import org.kiji.express.flow._
 import org.kiji.express.music.avro.SongMetadata
+import org.kiji.express.flow.framework.hfile.HFileKijiOutput
 
 /**
- * Imports metadata about songs into a Kiji table.
+ * Imports metadata about songs into a Kiji table, by outputting HFiles.  After running this job,
+ * the generated HFiles need to be bulk-imported into the songs table.
  *
- * This importer expects two command line arguments: `--table-uri` and `--input`. The
+ * This importer expects thre command line arguments: `--table-uri`, `--input`, and `--output`. The
  * argument `--table-uri` should be set to the Kiji URI of a songs table that the import will
  * target. The argument `--input` should be the HDFS path to a file containing JSON records
- * of song meta data.
+ * of song meta data.  The argument `--output` should be the HDFS path to the directory that the
+ * HFiles should be output to.
  *
  * See the file `song-metadata.json` packaged with this tutorial for the structure of JSON
  * records imported.
  *
- @param args passed in from the command line.
+ * Example usage:
+ *     express.py job \
+ *     -libjars=${MUSIC_EXPRESS_HOME}/lib/* \
+ *     --user_jar=${MUSIC_EXPRESS_HOME}/lib/kiji-express-music-2.0.2.jar \
+ *     --job-name=org.kiji.express.music.bulkimport.SongMetadataBulkImporter \
+ *     --mode=hdfs --input express-tutorial/song-metadata.json \
+ *     --table-uri ${KIJI}/songs \
+ *     --output express-tutorial/output
+ *
+ *
+ * @param args passed in from the command line.
  */
-class SongMetadataImporter(args: Args) extends KijiJob(args) {
+class SongMetadataBulkImporter(args: Args) extends KijiJob(args) {
   /**
    * Transforms a JSON record into a tuple whose fields correspond to the fields from the
    * JSON record.
@@ -50,12 +63,12 @@ class SongMetadataImporter(args: Args) extends KijiJob(args) {
   def parseJson(json: String): (String, String, String, String, String, Long, Long) = {
     val metadata = JSON.parseFull(json).get.asInstanceOf[Map[String, String]]
     (metadata.get("song_id").get,
-        metadata.get("song_name").get,
-        metadata.get("album_name").get,
-        metadata.get("artist_name").get,
-        metadata.get("genre").get,
-        metadata.get("tempo").get.toLong,
-        metadata.get("duration").get.toLong)
+      metadata.get("song_name").get,
+      metadata.get("album_name").get,
+      metadata.get("artist_name").get,
+      metadata.get("genre").get,
+      metadata.get("tempo").get.toLong,
+      metadata.get("duration").get.toLong)
   }
 
   /**
@@ -71,7 +84,9 @@ class SongMetadataImporter(args: Args) extends KijiJob(args) {
   // 3. Transforms the song id for each song into an entity id for the songs table.
   // 4. Packs song name, album name, artist name, genre, tempo, and duration for the song
   //    into a generic Avro record with the SongMetadata schema.
-  def songMetadataPipe = TextLine(args("input"))
+  // 5. Writes to HFiles the Avro records to the column "info:metadata" in a row for the song,
+  //    for importing into a Kiji table.
+  TextLine(args("input"))
     .map('line -> ('song_id, 'song_name, 'album_name, 'artist_name, 'genre, 'tempo, 'duration)) {
       parseJson
     }
@@ -79,12 +94,9 @@ class SongMetadataImporter(args: Args) extends KijiJob(args) {
     .packGenericRecord(
       ('song_name, 'album_name, 'artist_name, 'genre, 'tempo, 'duration) -> 'metadata)(
       metadataSchema)
-
-  // 5. Writes the Avro records to the column "info:metadata" in a row for the song in a Kiji
-  //    table.
-  songMetadataPipe
-      .write(KijiOutput.builder
-          .withTableURI(args("table-uri"))
-          .withColumns('metadata -> "info:metadata")
-          .build)
+    .write(HFileKijiOutput.builder
+      .withTableURI(args("table-uri"))
+      .withColumns('metadata -> "info:metadata")
+      .withHFileOutput(args("output"))
+      .build)
 }

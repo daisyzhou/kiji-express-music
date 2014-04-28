@@ -43,6 +43,7 @@
       <groupId>org.kiji.schema</groupId>
       <artifactId>kiji-schema</artifactId>
       <version>${kiji-schema.version}</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.kiji.schema-shell</groupId>
